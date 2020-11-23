@@ -72,7 +72,6 @@ def main(args):
 
     print("\nCalculating frame differences...")
     means = []
-    print(len(frame_diffs))
     for i in range(len(frame_diffs)):
         progress(i, len(frame_diffs), "Calculating mean for frame")
         means.append(frame_diffs[i].mean())
