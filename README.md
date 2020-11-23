@@ -34,7 +34,7 @@ python video_analyzer.py -h
 
 Here is what that output looks like:
 ```
-usage: video_analyser.py [-h] [-o OUTPUT] [-t THRESHOLD] INPUT
+usage: video_analyser.py [-h] [-o OUTPUT] [-t THRESHOLD] [-s {0,1,2,3}] INPUT
 
 Analyze framerate, frame drops, and frame tears of a video file.
 
@@ -48,5 +48,12 @@ optional arguments:
   -t THRESHOLD, --threshold THRESHOLD
                         Pixel difference threshold to count as duplicate frames, must be an integer between 0 and 255.
                         A value of 0 will count all all frames as unique, while 255 will only count
-                        frames that are 100 percent different (Default is 5).
+                        frames that are 100 percent different (Default: 5).
+  -s {0,1,2,3}, --save {0,1,2,3}
+                        Save the video frames of the original video as well as a version with duplicated frames removed.
+                        A value of 0 will not save any video files.
+                        A value of 1 will only save the original video file.
+                        A value of 2 will only save the version with duplicated frames removed.
+                        A value of 3 will save both the original and version with duplicated frames removed.
+                        Note that saving the video file(s) can drastically increase the program's runtime. (Default: 0)
 ```
