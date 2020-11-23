@@ -176,7 +176,7 @@ def main(args):
 
         while(cap.isOpened()):
             cur_frame += 1
-            progress(cur_frame, len(frames), "Displaying frame")
+            progress(cur_frame, len(frames), "Saving frame")
             if cur_frame in res:
                 ret, frame = cap.read()
                 try:
@@ -187,8 +187,8 @@ def main(args):
                 except:
                     break
 
-            # if cur_frame > len(frames):
-            #     break
+            if cur_frame > len(frames):
+                break
 
     cap.release()
     if result is not None:
