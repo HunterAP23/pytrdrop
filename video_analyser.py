@@ -8,9 +8,9 @@ from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
 
-def progress(cur_frame, total_frames):
+def progress(cur_frame, total_frames, msg):
     percent = "{0:.2f}".format(cur_frame * 100 / total_frames).zfill(5)
-    sys.stdout.write("\rCalculating frame " + str(cur_frame) + " out of " + str(total_frames) + " : " + percent + "%")
+    sys.stdout.write("\r{0} {1} out of {2} : {3}%".format(msg, cur_frame, total_frames, percent))
     sys.stdout.flush()
 
 def main(args):
@@ -24,75 +24,77 @@ def main(args):
     print("Reported FPS: {0}".format(reported_fps))
     print("Reported Bitrate: {0}kbps".format(reported_bitrate))
 
-    # data_dict = dict()
-    # data_dict["framerate"] = []
-    # data_dict["frametime"] = []
+    frame_diffs = []
 
-    # times = dict()
-    # times["start"] = []
-    # times["end"] = []
-    # times["processing"] = []
-    frame_number = 0
-
-    # new_frame_time = 0
-    # prev_frame_time = time.time()
-    # processing_time_start = 0
-    # while(cap.isOpened()):
-    #     progress(frame_number, total_frames)
-    #     frame_number += 1
-    #
-    #     processing_time_total = time.time() - processing_time_start
-    #
-    #     ret, frame = cap.read()
-    #
-    #     if not ret:
-    #         break
-    #
-    #     # width  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    #     # height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    #
-    #     new_frame_time = time.time()
-    #     times["start"].append(prev_frame_time)
-    #     times["end"].append(new_frame_time)
-    #     times["processing"].append(processing_time_total)
-    #
-    #     prev_frame_time = new_frame_time
-    #     processing_time_start = time.time()
-    #     # if frame_number == 60:
-    #     #     break
-    #
-    #     # cv2.putText(frame, fps, (7, 70), font, 3, (100, 255, 0), 3, cv2.LINE_AA)
-    #     cv2.imshow("frame", frame)
-    #
-    #     # press "Q" if you want to exit
-    #     if cv2.waitKey(1) & 0xFF == ord("q"):
-    #         break
+    frame_number = -1
 
     prev_frame = None
     while(cap.isOpened()):
-        progress(frame_number, total_frames)
         frame_number += 1
+        progress(frame_number, total_frames, "Calculating frame")
 
         ret, frame = cap.read()
 
-        if frame_number == 1:
+        if frame_number == 0:
             prev_frame = frame.copy()
             continue
 
-        current_frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        previous_frame_gray = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
+        try:
+            frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            prev_frame_gray = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
+            frame_diff = cv2.absdiff(frame_gray, prev_frame_gray)
+            frame_diffs.append(frame_diff)
 
-        frame_diff = cv2.absdiff(current_frame_gray,previous_frame_gray)
-
-        cv2.imshow("frame diff", frame_diff)
-        if cv2.waitKey(1) & 0xFF == ord("q"):
+            prev_frame = frame.copy()
+        except:
             break
 
-        prev_frame = frame.copy()
+        if frame_number > total_frames:
+            break
 
     cap.release()
     cv2.destroyAllWindows()
-    progress(total_frames, total_frames)
+    progress(total_frames, total_frames, "Calculating frame")
+
+    print("\nCalculating frame differences...")
+    means = []
+    for i in range(len(frame_diffs)):
+        progress(i, len(frame_diffs), "Calculating mean for frame")
+        means.append(frame_diffs[i].mean())
+    progress(len(frame_diffs), len(frame_diffs), "Calculating mean for frame")
+
+    frames = []
+
+    print("\nGetting average difference per frame...")
+    for i in range(len(means)):
+        progress(i, len(means), "Calculating mean difference per frame for frame")
+        if means[i] > args.THRESHOLD:
+            frames.append(True)
+        else:
+            frames.append(False)
+    progress(len(means), len(means), "Calculating mean difference per frame for frame")
+
+    print("\nThere were a total of {0} unique frames found with the threshold of {1}".format(sum(frames), args.THRESHOLD))
+
+    res = [i for i, val in enumerate(frames) if val]
+
+    times = dict()
+
+    base = float((1 / reported_fps) * 1000)
+    for i in range(len(res)):
+        if i == 0:
+            times[i] = base
+            continue
+        times[i] = base * (res[i] - res[i - 1] + 1)
+
+    data = dict()
+    data["frame number"] = []
+    data["frametime"] = []
+    data["framerate"] = []
+    for k, v in times.items():
+        data["frame number"].append(k)
+        data["frametime"].append(v)
+        data["framerate"].append(1 / (v / 1000))
 
     output_name = ""
     if args.OUTPUT:
@@ -104,21 +106,27 @@ def main(args):
         temp_name = "".join(temp_name[0:-1])
         output_name = "{0}.csv".format(temp_name)
 
-    print("")
-    for i in range(len(times["start"])):
-        val = 1 / (times["end"][i] - times["start"][i])
-        if val > 60:
-            print("ERROR")
-            print("{0}".format(val))
-        else:
-            print("{0}".format(val))
+    with open(output_name, "w", newline="\n") as csv_file:
+        df = pd.DataFrame.from_dict(data)
+        df.to_csv(csv_file, index=False)
 
-    # df = pd.DataFrame.from_dict(data_dict)
-    # print("")
-    # print(df)
-
-    # with open(output_name, "w") as csv_file:
-
+    # if args.VIEW:
+    #     print("Displaying video containing only unique frames.")
+    #     cur_frame = 0
+    #     cap = cv2.VideoCapture(args.INPUT)
+    #     while(cap.isOpened()):
+    #         cur_frame += 1
+    #         if cur_frame <= len(res):
+    #             if cur_frame in res:
+    #                 ret, frame = cap.read()
+    #                 try:
+    #                     cv2.imshow("frame", frame)
+    #                     if cv2.waitKey(1) & 0xFF == ord("q"):
+    #                         break
+    #                 except:
+    #                     continue
+    #         else:
+    #             break
 
 
 def parse_arguments():
@@ -128,6 +136,14 @@ def parse_arguments():
 
     output_help = "Output filename (Default will be named after input file)."
     parser.add_argument("-o", "--output", dest="OUTPUT", type=str, help=output_help)
+
+    threshold_help = "Pixel difference threshold to count as duplicate frames, must be an integer between 0 and 255.\n"
+    threshold_help += "A value of 0 will count all all frames as unique, while 255 will only count\n"
+    threshold_help += "frames that are 100 percent different (Default is 5)."
+    parser.add_argument("-t", "--threshold", dest="THRESHOLD", type=int, default=5, help=threshold_help)
+
+    # view_help = "Whether or not to display the final video with all the duplicated frames removed (default: False)"
+    # parser.add_argument("-v", "--view", dest="VIEW", action="store_true", default=False, help=view_help)
 
     args = parser.parse_args()
 
