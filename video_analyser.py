@@ -100,7 +100,7 @@ def main(args):
         if i == 0:
             times[i] = base
             continue
-        times[i] = base * (res[i] - res[i - 1] + 1)
+        times[i] = base * (res[i] - res[i - 1])
 
     data = dict()
     data["frame number"] = []
