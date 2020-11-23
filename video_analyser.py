@@ -99,8 +99,12 @@ def main(args):
     output_name = ""
     if args.OUTPUT:
         temp_name = args.OUTPUT.split(".")
-        temp_name = "".join(temp_name[0:-1])
-        output_name = "{0}.csv".format(temp_name)
+        if temp_name[-1] == "csv":
+            temp_name = ".".join(temp_name)
+            output_name = os.path.join(os.getcwd(), temp_name)
+        else:
+            temp_name = ".".join(temp_name) + ".csv"
+            output_name = os.path.join(os.getcwd(), temp_name)
     else:
         temp_name = args.INPUT.split(".")
         temp_name = "".join(temp_name[0:-1])
