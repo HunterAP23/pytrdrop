@@ -29,7 +29,7 @@ python -m pipenv update
 You can use the help command to get a list of available options with the
 following command:
 ```
-python fps_2_chart.py -h
+python video_analyzer.py -h
 ```
 
 Here is what that output looks like:
