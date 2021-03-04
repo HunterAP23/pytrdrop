@@ -1,16 +1,16 @@
 import argparse as argp
 import os
 import sys
-import time
 
 import cv2
-import numpy as np
 import pandas as pd
+
 
 def progress(cur_frame, total_frames, msg):
     percent = "{0:.2f}".format(cur_frame * 100 / total_frames).zfill(5)
     sys.stdout.write("\r{0} {1} out of {2} : {3}%".format(msg, cur_frame, total_frames, percent))
     sys.stdout.flush()
+
 
 def main(args):
     cap = cv2.VideoCapture(args.INPUT)
@@ -23,18 +23,24 @@ def main(args):
     print("Reported FPS: {0}".format(reported_fps))
     print("Reported Bitrate: {0}kbps".format(reported_bitrate))
 
-    frame_diffs = []
-
-    frame_number = -1
-
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     size = (width, height)
 
     result = None
+    original_video = None
     if args.SAVE == 1 or args.SAVE == 3:
-        result = cv2.VideoWriter("original.avi", cv2.VideoWriter_fourcc(*"MJPG"), reported_fps, size)
+        if args.OUTPUT != "":
+            original_video = str(args.OUTPUT) + "_original.avi"
+        else:
+            original_video = "original.avi"
+        if os.path.exists(original_video):
+            os.remove(original_video)
+        result = cv2.VideoWriter(original_video, cv2.VideoWriter_fourcc(*"MJPG"), reported_fps, size)
+        video_diff = cv2.VideoWriter("diff.avi", cv2.VideoWriter_fourcc(*"MJPG"), reported_fps, size)
 
+    frames = []
+    frame_number = -1
     prev_frame = None
     while(cap.isOpened()):
         frame_number += 1
@@ -53,44 +59,43 @@ def main(args):
             frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             prev_frame_gray = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
             frame_diff = cv2.absdiff(frame_gray, prev_frame_gray)
-            frame_diffs.append(frame_diff)
+            # frame_diff = cv2.absdiff(frame, prev_frame)
+            video_diff.write(frame)
+            mean = frame_diff.mean()
+
+            if mean > args.THRESHOLD:
+                frames.append(True)
+            else:
+                frames.append(False)
 
             prev_frame = frame.copy()
         except KeyboardInterrupt:
             exit(1)
-        except:
-            break
+        except Exception:
+            # print("\r\n{0}".format(e))
+            if frame_number > total_frames:
+                break
+            else:
+                continue
 
         if frame_number > total_frames:
             break
 
+        # if frame_number > 2000:
+        #     break
+
     cap.release()
     if result is not None:
         result.release()
+    video_diff.release()
     cv2.destroyAllWindows()
     progress(total_frames, total_frames, "Calculating frame")
 
-    print("\nCalculating frame differences...")
-    means = []
-    for i in range(len(frame_diffs)):
-        progress(i, len(frame_diffs), "Calculating mean for frame")
-        means.append(frame_diffs[i].mean())
-    progress(len(frame_diffs), len(frame_diffs), "Calculating mean for frame")
-
-    frames = []
-
-    print("\nGetting average difference per frame...")
-    for i in range(len(means)):
-        progress(i, len(means), "Calculating mean difference per frame for frame")
-        if means[i] > args.THRESHOLD:
-            frames.append(True)
-        else:
-            frames.append(False)
-    progress(len(means), len(means), "Calculating mean difference per frame for frame")
-
     print("\nThere were a total of {0} unique frames found with the threshold of {1}".format(sum(frames), args.THRESHOLD))
 
-    res = [i for i, val in enumerate(frames) if val]
+    res = [i for i in frames if i]
+    print("len of res: {0}".format(len(res)))
+    print([i for i in range(len(res)) if res[i] is False])
 
     times = dict()
 
@@ -98,8 +103,8 @@ def main(args):
     for i in range(len(res)):
         if i == 0:
             times[i] = base
-            continue
-        times[i] = base * (res[i] - res[i - 1])
+        else:
+            times[i] = base + (base * (res[i] - res[i - 1]))
 
     data = dict()
     data["frame number"] = []
@@ -108,7 +113,10 @@ def main(args):
     for k, v in times.items():
         data["frame number"].append(k)
         data["frametime"].append(v)
-        data["framerate"].append(1 / (v / 1000))
+        if v == 0:
+            data["framerate"].append("INF")
+        else:
+            data["framerate"].append(1 / (v / 1000))
 
     output_name = ""
     if args.OUTPUT:
@@ -150,7 +158,7 @@ def main(args):
     stats_frametime_dict["99.9 Percent Lows"] = dict(frametime_stats.quantile(q=0.999, axis=0))
 
     stats_framerate_dict["Lowest"] = dict(framerate_stats.min(axis=0))
-    stats_framerate_dict["Highest"]= dict(framerate_stats.max(axis=0))
+    stats_framerate_dict["Highest"] = dict(framerate_stats.max(axis=0))
     stats_framerate_dict["Mean"] = dict(framerate_stats.mean(axis=0))
     stats_framerate_dict["Median"] = dict(framerate_stats.median(axis=0))
     stats_framerate_dict["0.1 Percent Lows"] = dict(framerate_stats.quantile(q=0.001, axis=0))
@@ -166,35 +174,46 @@ def main(args):
 
     if args.SAVE > 1:
         print("Saving video containing only unique frames.")
-        cur_frame = 0
         cap = cv2.VideoCapture(args.INPUT)
 
         result = None
+        unique_video = None
         if args.SAVE > 1:
-            result = cv2.VideoWriter("unique.avi", cv2.VideoWriter_fourcc(*"MJPG"), reported_fps, size)
+            if args.OUTPUT != "":
+                unique_video = str(args.OUTPUT) + "_unique.avi"
+            else:
+                unique_video = "unique.avi"
+            if os.path.exists(unique_video):
+                os.remove(unique_video)
+            result = cv2.VideoWriter(unique_video, cv2.VideoWriter_fourcc(*"MJPG"), reported_fps, size)
 
+        cur_frame = -1
         while(cap.isOpened()):
             cur_frame += 1
             progress(cur_frame, len(frames), "Saving frame")
-            if cur_frame in res:
-                ret, frame = cap.read()
-                try:
-                    if result is not None:
+            try:
+                print("cur_frame: {0}".format(cur_frame))
+                print("frames[cur_frame]: {0}".format(frames[cur_frame]))
+                if frames[cur_frame]:
+                    ret, frame = cap.read()
+                    try:
                         result.write(frame)
-                except KeyboardInterrupt:
-                    exit(1)
-                except:
-                    break
-
-            if cur_frame > len(frames):
+                    except KeyboardInterrupt:
+                        exit(1)
+                    except Exception:
+                        break
+                else:
+                    continue
+            except IndexError:
                 break
 
-    cap.release()
-    if result is not None:
-        result.release()
-    cv2.destroyAllWindows()
+        cap.release()
+        if result is not None:
+            result.release()
+        cv2.destroyAllWindows()
 
-    print("\nStatistics", stats_basic_df.transpose().to_string(header=False))
+    print("\nStatistics")
+    print(stats_basic_df.transpose().to_string(header=False))
     print("\n", stats_joined.transpose().to_string())
 
 
@@ -226,6 +245,7 @@ def parse_arguments():
         exit(1)
 
     return(args)
+
 
 if __name__ == "__main__":
     args = parse_arguments()
