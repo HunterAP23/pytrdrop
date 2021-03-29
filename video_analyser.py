@@ -110,7 +110,7 @@ def main(args):
     if video_diff is not None:
         video_diff.release()
     cv2.destroyAllWindows()
-    progress(total_frames, total_frames, "Calculating frame")
+    # progress(total_frames, total_frames, "Calculating frame")
 
     print("\nThere were a total of {0} unique frames found with the threshold of {1}".format(sum(frames), args.THRESHOLD))
 
