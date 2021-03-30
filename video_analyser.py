@@ -1,20 +1,26 @@
 import argparse as argp
-import multiprocessing as mp
-import os
+import multiprocessing.dummy as mp
 from pathlib import Path
-import sys
+import time
 
 import cv2
 import pandas as pd
 from tqdm import tqdm
 
 
-# def progress(cur_frame, total_frames, msg):
-#     percent = "{0:.2f}".format(cur_frame * 100 / total_frames).zfill(5)
-#     sys.stdout.write("\r{0} {1} out of {2} : {3}%".format(msg, cur_frame, total_frames, percent))
-#     sys.stdout.flush()
+def writer_write(writer, q):
+    while True:
+        frame = q.get()
+        if type(frame) == str and frame == "STOP":
+            return
+        writer.write(frame)
 
-# def video_writer(writer, )
+
+def writer_create(name: str, fps, size, q):
+    video_writer = cv2.VideoWriter(name, cv2.VideoWriter_fourcc(*"MJPG"), fps, size)
+    writer_write(video_writer, q)
+    video_writer.release()
+    return
 
 
 def main(args):
@@ -38,85 +44,101 @@ def main(args):
     else:
         original_path = Path(args.INPUT)
     original_name = original_path.stem
-    original_suffix = original_path.suffix
     original_parent = original_path.parent
 
-    video_result = None # Video with duplicated frames removed
+    # Video with duplicated frames removed
     result_queue = None
+    result_proc = None
     if args.SAVE in (1, 3):
-        result_name = Path(original_path.parent).joinpath(original_name + "_result.avi")
+        result_name = Path(original_parent).joinpath(original_name + "_result.avi")
         result_name.unlink(missing_ok=True)
-        video_result = cv2.VideoWriter(str(result_name), cv2.VideoWriter_fourcc(*"MJPG"), reported_fps, size)
         result_queue = mp.Queue()
+        result_proc = mp.Process(target=writer_create, args=(str(result_name), reported_fps, size, result_queue,))
+        result_proc.start()
 
-    video_diff = None # Video with difference blend mode between original and result video
+    # Video with difference blend mode between original and result video
     diff_queue = None
-    if args.SAVE  in (2, 3):
-        diff_name = Path(original_path.parent).joinpath(original_name + "_diff.avi")
+    diff_proc = None
+    if args.SAVE in (2, 3):
+        diff_name = Path(original_parent).joinpath(original_name + "_diff.avi")
         diff_name.unlink(missing_ok=True)
-        video_diff = cv2.VideoWriter(str(diff_name), cv2.VideoWriter_fourcc(*"MJPG"), reported_fps, size)
         diff_queue = mp.Queue()
+        diff_proc = mp.Process(target=writer_create, args=(str(diff_name), reported_fps, size, diff_queue,))
+        diff_proc.start()
 
     frames = []
     frame_number = -1
     prev_frame = None
-    with tqdm(total=total_frames, unit="frames") as prog_bar:
-        while(cap.isOpened()):
-            frame_number += 1
-            # progress(frame_number, total_frames, "Calculating frame")
-            prog_bar.set_description("Processing frame number {}".format(frame_number))
-            prog_bar.update(1)
+    # with tqdm(total=total_frames, unit="frames") as prog_bar:
+    time_start = time.time()
+    prog_bar = tqdm(total=total_frames, unit="frames", leave=True)
+    while(cap.isOpened()):
+        frame_number += 1
+        prog_bar.set_description("Processing frame number {}".format(frame_number))
+        prog_bar.update(1)
 
-            ret, frame = cap.read()
+        ret, frame = cap.read()
 
-            if frame_number == 0:
-                prev_frame = frame.copy()
-                continue
+        if frame_number == 0:
+            prev_frame = frame.copy()
+            continue
 
-            try:
-                # frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                # prev_frame_gray = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
-                # frame_diff = cv2.absdiff(frame_gray, prev_frame_gray)
-                frame_diff = cv2.absdiff(frame, prev_frame)
-                if video_diff is not None:
-                    video_diff.write(frame_diff)
-                    # diff_queue.put(frame_diff)
-                mean = frame_diff.mean()
+        try:
+            # frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            # prev_frame_gray = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
+            # frame_diff = cv2.absdiff(frame_gray, prev_frame_gray)
+            frame_diff = cv2.absdiff(frame, prev_frame)
+            if diff_queue is not None:
+                # diff_writer.write(frame_diff)
+                diff_queue.put(frame_diff)
+            mean = frame_diff.mean()
 
-                if mean > args.THRESHOLD:
-                    frames.append(True)
-                    if video_result is not None:
-                        video_result.write(frame)
-                        # result_queue.put(frame)
-                else:
-                    frames.append(False)
+            if mean > args.THRESHOLD:
+                frames.append(True)
+                if result_queue is not None:
+                    # result_writer.write(frame)
+                    result_queue.put(frame)
+            else:
+                frames.append(False)
 
-                prev_frame = frame.copy()
-            except KeyboardInterrupt:
-                exit(1)
-            except Exception as e:
-                # print("\r\n{0}".format(e))
-                if frame_number > total_frames:
-                    break
-                else:
-                    continue
-
+            prev_frame = frame.copy()
+        except KeyboardInterrupt:
+            exit(1)
+        except Exception as e:
+            # print("\r\n{0}".format(e))
             if frame_number > total_frames:
                 break
+            else:
+                continue
+
+        if frame_number > total_frames:
+            break
+
+    time_stop = time.time()
+    n = prog_bar.n
+    prog_bar.close()
+    msg = "Calculations "
 
     cap.release()
-    if video_result is not None:
-        video_result.release()
-    if video_diff is not None:
-        video_diff.release()
+    if result_queue is not None:
+        print("Finishing writing to result video file.")
+        result_queue.put("STOP")
+        result_proc.join()
+        msg += "and writing to the result file "
+    if diff_queue is not None:
+        print("Finishing writing to difference video file.")
+        diff_queue.put("STOP")
+        diff_proc.join()
+        msg += "and writing to the difference file "
     cv2.destroyAllWindows()
-    progress(total_frames, total_frames, "Calculating frame")
 
-    print("\nThere were a total of {0} unique frames found with the threshold of {1}".format(sum(frames), args.THRESHOLD))
+    time_total = time_stop - time_start
+    app_fps = n / time_total
+    msg += "took {0} seconds to complete.\n"
+    msg += "Average frames calculated per second is {1}."
+    print(msg.format(time_total, app_fps))
 
     res = [i for i in frames if i]
-    print("len of res: {0}".format(len(res)))
-    print([i for i in range(len(res)) if res[i] is False])
 
     times = dict()
 
@@ -151,11 +173,11 @@ def main(args):
     stats_basic["Number of Unique Frames"] = [int(sum(frames))]
     stats_basic["Number of Duplicated Frames"] = [int(len(frames) - sum(frames))]
     if len(frames) == 0:
-        stats_basic["Percentage of Unique Frames"] = [0]
-        stats_basic["Percentage of Duplicated Frames"] = [0]
+        stats_basic["Percentage of Unique Frames"] = ["0 %"]
+        stats_basic["Percentage of Duplicated Frames"] = ["0 %"]
     else:
-        stats_basic["Percentage of Unique Frames"] = [sum(frames) / len(frames) * 100]
-        stats_basic["Percentage of Duplicated Frames"] = [stats_basic["Number of Duplicated Frames"][0] / len(frames) * 100]
+        stats_basic["Percentage of Unique Frames"] = ["{} %".format(sum(frames) / len(frames) * 100)]
+        stats_basic["Percentage of Duplicated Frames"] = ["{} %".format(stats_basic["Number of Duplicated Frames"][0] / len(frames) * 100)]
 
     stats_frametime_dict["Lowest"] = dict(frametime_stats.min(axis=0))
     stats_frametime_dict["Highest"] = dict(frametime_stats.max(axis=0))
@@ -181,51 +203,11 @@ def main(args):
 
     stats_joined = pd.concat([stats_frametime_df, stats_framerate_df], axis=0)
 
-    # if args.SAVE > 1:
-    #     print("Saving video containing only unique frames.")
-    #     cap = cv2.VideoCapture(args.INPUT)
-    #
-    #     video_result = None
-    #     unique_video = None
-    #     if args.SAVE > 1:
-    #         if args.OUTPUT != "":
-    #             unique_video = str(args.OUTPUT) + "_unique.avi"
-    #         else:
-    #             unique_video = "unique.avi"
-    #         if os.path.exists(unique_video):
-    #             os.remove(unique_video)
-    #         result = cv2.VideoWriter(unique_video, cv2.VideoWriter_fourcc(*"MJPG"), reported_fps, size)
-    #
-    #     cur_frame = -1
-    #     while(cap.isOpened()):
-    #         cur_frame += 1
-    #         progress(cur_frame, len(frames), "Saving frame")
-    #         try:
-    #             print("cur_frame: {0}".format(cur_frame))
-    #             print("frames[cur_frame]: {0}".format(frames[cur_frame]))
-    #             if frames[cur_frame]:
-    #                 ret, frame = cap.read()
-    #                 try:
-    #                     result.write(frame)
-    #                 except KeyboardInterrupt:
-    #                     exit(1)
-    #                 except Exception:
-    #                     break
-    #             else:
-    #                 continue
-    #         except IndexError:
-    #             break
-    #
-    #     cap.release()
-    #     if result is not None:
-    #         result.release()
-    #     cv2.destroyAllWindows()
-
     print("\nStatistics")
     print(stats_basic_df.transpose().to_string(header=False))
     print("\n", stats_joined.transpose().to_string())
 
-    csv_name = Path(original_path.parent).joinpath(original_name + "_report.csv")
+    csv_name = Path(original_parent).joinpath(original_name + "_report.csv")
     csv_name.unlink(csv_name)
     df.to_csv(csv_name, index=False)
     # stats_joined.to_csv(csv_name)
