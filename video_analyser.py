@@ -131,10 +131,6 @@ def main(args):
         diff_proc.join()
         msg += "and writing to the difference file "
     cv2.destroyAllWindows()
-<<<<<<< HEAD
-=======
-    # progress(total_frames, total_frames, "Calculating frame")
->>>>>>> 77f05d27cd7a5743fae7cc651e9d3ab7ba3db6b3
 
     time_total = time_stop - time_start
     app_fps = n / time_total
