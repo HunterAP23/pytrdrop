@@ -128,6 +128,9 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+# Do not inclide Pipfile.lock
+Pipfile.lock
+
 # Video files
 *.avi
 *.mp4
