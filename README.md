@@ -5,58 +5,58 @@ The aim is to replicate the features of [trdrop](https://github.com/cirquit/trdr
 but using Python with OpenCV.
 
 # Installation & Requirements
-Requires Python 3.
+Requires Python 3.4 (3.7 or newer preferred)
 Install the dependencies by running the following command:
-```bash
+```
 pip install -r requirements.txt
 ```
 or:
-```bash
+```
 python -m pip install -r requirements.txt
 ```
 
 If you would prefer keep your global packages tidy,
 you can install the `pipenv` module and create a virtual environment like so:
 1. Install `pipenv`
-```bash
+```
 pip install pipenv
 ```
 or:
-```bash
+```
 python -m pip install pipenv
 ```
 
 2. Create the actual virtual environment by opening a terminal window at the
 location of this project and run:
-```bash
+```
 pipenv update
 ```
 or:
-```bash
+```
 python -m pipenv update
 ```
 This will create a virtual environment and install the newest versions of the
 required packages.
 
 3. Enter the virtual environment from the terminal:
-```bash
+```
 pipenv shell
 ```
 Or if you want to run a command directly (such as getting the `help` output of
 the program):
-```bash
+```
 pipenv run python video_analyser.py -h
 ```
 
 # Usage
 You can use the help command to get a list of available options with the
 following command:
-```bash
+```
 python video_analyzer.py -h
 ```
 
 Here is what that output looks like:
-```bash
+```
 usage: video_analyser.py [-h] [-o OUTPUT] [-t THRESHOLD] [-s {0,1,2,3}] INPUT
 
 Analyze framerate, frame drops, and frame tears of a video file.
