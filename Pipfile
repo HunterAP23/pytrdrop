@@ -6,6 +6,6 @@ name = "pypi"
 [packages]
 opencv-python = ">=4.13.0.92"
 pandas = ">=3.0.2"
-tqdm = ">=2.2.3"
+tqdm = ">=4.67.3"
 
 [dev-packages]
